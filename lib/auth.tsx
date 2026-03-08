@@ -44,18 +44,23 @@ const LOGIN_SHEET_NAME = "Login_v2"
 // --- Hardcoded App Data (Removes Master Sheet Dependency) ---
 const ROLES_AVAILABLE = ["admin", "user"];
 const PAGES_AVAILABLE = [
-    { pageid: "", pagename: "Dashboard" },
-    { pageid: "orders", pagename: "Orders" },
-    { pageid: "full-kitting", pagename: "Full Kitting" },
-    { pageid: "lab-test", pagename: "Lab Test" }, // Add this line
-    { pageid: "job-cards", pagename: "Job Cards" },
-    { pageid: "production", pagename: "Production" },
-    { pageid: "lab-testing1", pagename: "Lab Test 1" },
-    { pageid: "lab-testing2", pagename: "Lab Test 2" },
-    { pageid: "chemical-test", pagename: "Chemical Test" },
-    { pageid: "check", pagename: "Check" },
-    { pageid: "tally", pagename: "Tally" },
-    { pageid: "settings", pagename: "Settings" },
+  { pageid: "dashboard", pagename: "Dashboard" },
+  { pageid: "orders", pagename: "Orders" },
+  { pageid: "full-kitting", pagename: "Full Kitting" },
+  { pageid: "lab-test", pagename: "Lab Test" }, // Add this line
+  { pageid: "job-cards", pagename: "Job Cards" },
+  { pageid: "production", pagename: "Production" },
+  { pageid: "lab-testing1", pagename: "Lab Test 1" },
+  { pageid: "lab-testing2", pagename: "Lab Test 2" },
+  { pageid: "chemical-test", pagename: "Chemical Test" },
+  { pageid: "check", pagename: "Check" },
+  { pageid: "tally", pagename: "Tally" },
+  { pageid: "sf-production", pagename: "SF Production" },
+  { pageid: "sfjob-card", pagename: "Job Card Planning" },
+  { pageid: "production-entry", pagename: "Production Entry" },
+  { pageid: "mark-done", pagename: "Mark Done" },
+  { pageid: "crushing", pagename: "Crushing" },
+  { pageid: "settings", pagename: "Settings" },
 ];
 
 
@@ -86,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             username: row.c[0]?.v,
             id: row.c[1]?.v,
             role: row.c[3]?.v,
-            permissions: row.c[4]?.v ? row.c[4].toString().split(',') : []
+            permissions: row.c[4]?.v ? row.c[4].v.toString().split(',').map((p: string) => p.trim()) : []
           }))
           .filter((user: User) => user.id && user.username);
         setAllUsers(users);
@@ -114,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(LOGIN_SHEET_NAME)}&headers=0&cb=${new Date().getTime()}`
       const response = await fetch(url)
       if (!response.ok) throw new Error("Login failed: Could not connect to user database.");
-      
+
       const text = await response.text();
       const match = text.match(/google\.visualization\.Query\.setResponse\((.*)\)/);
       if (!match || !match[1]) throw new Error("Could not parse login response.");
@@ -131,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const rowPermissions = row.c[4]?.v;
 
         if (rowUsername?.toString().toLowerCase() === username.toLowerCase() && rowPassword?.toString() === password) {
-          foundUser = { username: rowUsername, id: rowId, role: rowRole, permissions: rowPermissions ? rowPermissions.toString().split(',') : [] };
+          foundUser = { username: rowUsername, id: rowId, role: rowRole, permissions: rowPermissions ? rowPermissions.toString().split(',').map((p: string) => p.trim()) : [] };
           break;
         }
       }
@@ -156,7 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const body = new URLSearchParams({ action: 'addUser', userData: JSON.stringify(userData) });
     const response = await fetch(WEB_APP_URL, { method: 'POST', body });
     const result = await response.json();
-    if(result.success) fetchUsers(); // Refresh data on success
+    if (result.success) fetchUsers(); // Refresh data on success
     return result;
   }
 
@@ -164,7 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const body = new URLSearchParams({ action: 'updateUser', userData: JSON.stringify(userData) });
     const response = await fetch(WEB_APP_URL, { method: 'POST', body });
     const result = await response.json();
-    if(result.success) fetchUsers();
+    if (result.success) fetchUsers();
     return result;
   }
 
@@ -172,7 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const body = new URLSearchParams({ action: 'deleteUser', userId });
     const response = await fetch(WEB_APP_URL, { method: 'POST', body });
     const result = await response.json();
-    if(result.success) fetchUsers();
+    if (result.success) fetchUsers();
     return result;
   }
 

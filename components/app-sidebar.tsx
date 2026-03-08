@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useMemo } from "react"
-import { Home, Settings, LogOut, PackageCheck, BarChart, FlaskConical, Beaker, FileSpreadsheet, ClipboardCheck, ListChecks, Clipboard, Package, ShoppingCart, Factory } from "lucide-react"
+import { Home, Settings, LogOut, PackageCheck, BarChart, FlaskConical, Beaker, FileSpreadsheet, ClipboardCheck, ListChecks, Clipboard, Package, ShoppingCart, Factory, PackagePlus, ClipboardList, FileCheck, CircleCheckBig, Hammer } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth"
@@ -24,6 +24,11 @@ export function AppSidebar() {
     { id: "chemical-test", title: "Chemical Test", icon: FileSpreadsheet, href: "/chemical-test" },
     { id: "check", title: "Check", icon: ClipboardCheck, href: "/check" },
     { id: "tally", title: "Tally", icon: ListChecks, href: "/tally" },
+    { id: "sf-production", title: "SF Production", icon: PackagePlus, href: "/sf-production" },
+    { id: "sfjob-card", title: "Job Cards", icon: ClipboardList, href: "/sfjob-card" },
+    { id: "production-entry", title: "Production Entry", icon: FileCheck, href: "/sfproduction-entry" },
+    { id: "mark-done", title: "Mark Done", icon: CircleCheckBig, href: "/mark-done" },
+    { id: "crushing", title: "Crushing", icon: Hammer, href: "/crushing" },
     { id: "settings", title: "Settings", icon: Settings, href: "/settings" },
   ], [])
 
