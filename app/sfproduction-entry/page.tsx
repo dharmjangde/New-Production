@@ -23,7 +23,7 @@ const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzVnLwTlFuGrlzyPSa2
 const SEMI_JOB_CARD_SHEET = "Semi Job Card";
 const SEMI_ACTUAL_SHEET = "Semi Actual";
 const MASTER_SHEET = "Master";
-const DRIVE_FOLDER_ID = "1xlnsYz7KhmN5uF_0E8XKHLbL9Z8xYk3L";
+const DRIVE_FOLDER_ID = "1H6cGQ1zfKN4V3MSuhKSf1yjCQq591bcH";
 const MAX_RAW_MATERIALS = 5;
 
 // ==================== TYPE DEFINITIONS ====================
@@ -184,7 +184,6 @@ export default function SemiActualProductionPage() {
         endProductQty: '',
         startingReading: '',
         endingReading: '',
-        machineRunningHour: '',
     });
 
     const { fetchData: fetchSemiJobCardData } = useGoogleSheet(SEMI_JOB_CARD_SHEET);
@@ -307,7 +306,6 @@ export default function SemiActualProductionPage() {
             endProductQty: '',
             startingReading: '',
             endingReading: '',
-            machineRunningHour: '',
         });
         setRawMaterialRows([{ name: '', qty: '' }]);
         setStartPhotoFile(null); setEndPhotoFile(null);
@@ -864,18 +862,7 @@ export default function SemiActualProductionPage() {
                                                 className="focus-visible:ring-violet-500"
                                             />
                                         </div>
-                                        <div className="space-y-1.5">
-                                            <Label className="text-[10px] text-slate-500 uppercase font-semibold">Machine Running Hours</Label>
-                                            <Input
-                                                readOnly
-                                                value={
-                                                    formData.startingReading && formData.endingReading
-                                                        ? String(Math.max(0, Number(formData.endingReading) - Number(formData.startingReading)))
-                                                        : '0'
-                                                }
-                                                className="bg-slate-100 text-amber-700 font-semibold cursor-default"
-                                            />
-                                        </div>
+
                                     </div>
                                     <div className="grid grid-cols-2 gap-3">
                                         {/* Start Photo */}
