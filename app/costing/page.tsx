@@ -22,6 +22,7 @@ const WEB_APP_URL =
 const SHEET_ID = "1Oh16UfYFmNff0YLxHRh_D3mw3r7m7b9FOvxRpJxCUh4"
 const ACTUAL_PRODUCTION_SHEET = "Actual Production"
 const JOB_CARDS_SHEET = "JobCards"
+const COSTING_RESPONSE_SHEET = "Costing Response"
 
 // --- Column Mapping for Costing Data ---
 const COSTING_COLUMNS = {
@@ -80,6 +81,16 @@ interface CompleteProductionDetails {
   planned6: string
   actual6: string
   remarks3: string
+}
+
+interface CostingResponseRecord {
+    serialNumber: string;
+    variableCost: string;
+    manufacturingCost: string;
+    interestDays: string;
+    interestCost: string;
+    transporting: string;
+    sellingPrice: string;
 }
 
 interface PendingCostingItem {
@@ -171,6 +182,7 @@ export default function CostingPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [selectedCosting, setSelectedCosting] = useState<PendingCostingItem | null>(null)
   const [formData, setFormData] = useState(initialFormState)
+  const [costingResponses, setCostingResponses] = useState<CostingResponseRecord[]>([])
   const [formErrors, setFormErrors] = useState<Record<string, string | null>>({})
   const [activeTab, setActiveTab] = useState("pending")
   const [visiblePendingColumns, setVisiblePendingColumns] = useState<Record<string, boolean>>({})
@@ -275,9 +287,10 @@ export default function CostingPage() {
     setLoading(true)
     setError(null)
     try {
-      const [actualProductionTable, jobCardsTable] = await Promise.all([
+      const [actualProductionTable, jobCardsTable, costingResponseTable] = await Promise.all([
         fetchDataWithGviz(ACTUAL_PRODUCTION_SHEET),
         fetchDataWithGviz(JOB_CARDS_SHEET).catch(() => ({ rows: [] })),
+        fetchDataWithGviz(COSTING_RESPONSE_SHEET).catch(() => ({ rows: [] })),
       ])
 
       const processGvizTable = (table: any) => {
@@ -391,9 +404,29 @@ export default function CostingPage() {
             completeDetails: processCompleteDetails(row),
           };
         })
-        .sort((a, b) => new Date(b.costingDate).getTime() - new Date(a.costingDate).getTime());
+        .sort((a: any, b: any) => new Date(b.costingDate).getTime() - new Date(a.costingDate).getTime());
 
       setHistoryCosting(historyData);
+
+      // --- Process Costing Response Data ---
+      if (costingResponseTable && costingResponseTable.rows) {
+          const responseRows = processGvizTable(costingResponseTable);
+          const responses: CostingResponseRecord[] = responseRows.map((row: any) => {
+              // User said "match the culumn Serial Number(br)" -> BR is index 69 (A=0, BR=70th col?)
+              // Wait, A=0, B=1, ..., Z=25, AA=26, ..., AZ=51, BA=52, ..., BR=69
+              // Let's take column BR as index 69.
+              return {
+                  serialNumber: String(row.col69 || ""), 
+                  variableCost: String(row.col4 || ""), // E (index 4)
+                  manufacturingCost: String(row.col5 || ""), // F (index 5)
+                  interestDays: String(row.col6 || ""), // G (index 6)
+                  interestCost: String(row.col7 || ""), // H (index 7)
+                  transporting: String(row.col8 || ""), // I (index 8)
+                  sellingPrice: String(row.col9 || ""), // J (index 9)
+              };
+          }).filter((r: any) => r.serialNumber);
+          setCostingResponses(responses);
+      }
 
     } catch (err: any) {
       setError(`Failed to load data: ${err.message}`)
@@ -627,7 +660,7 @@ export default function CostingPage() {
                                       Add Costing
                                     </Button>
                                   ) : (
-                                    item[col.dataKey as keyof PendingCostingItem] || "-"
+                                    (item as any)[col.dataKey] || "-"
                                   )}
                                 </TableCell>
                               ))}
@@ -685,7 +718,7 @@ export default function CostingPage() {
                                       ₹{Number(item.costingAmount).toLocaleString('en-IN')}
                                     </span>
                                   ) : (
-                                    item[col.dataKey as keyof HistoryCostingItem] || "-"
+                                    (item as any)[col.dataKey] || "-"
                                   )}
                                 </TableCell>
                               ))}
@@ -826,42 +859,47 @@ export default function CostingPage() {
                 </div>
               )}
 
-              {/* Section 3: Additional Production Details */}
-              <div className="space-y-3">
-                <h3 className="text-md font-semibold flex items-center gap-2 text-orange-700 bg-orange-50 p-2 rounded">
-                  <FileText className="h-4 w-4" /> Additional Production Details
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 border rounded-lg">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">Party Name</Label>
-                    <p className="text-sm bg-gray-50 p-2 rounded">{selectedCosting.completeDetails.partyName || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">Order No.</Label>
-                    <p className="text-sm bg-gray-50 p-2 rounded">{selectedCosting.completeDetails.orderNo || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">Color Condition</Label>
-                    <p className="text-sm bg-gray-50 p-2 rounded">{selectedCosting.completeDetails.colorCondition || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">PP Bag Used</Label>
-                    <p className="text-sm bg-gray-50 p-2 rounded">{selectedCosting.completeDetails.ppBagUsed || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">PP Bag To Be Used</Label>
-                    <p className="text-sm bg-gray-50 p-2 rounded">{selectedCosting.completeDetails.ppBagToBeUsed || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">PP Bag (Small)</Label>
-                    <p className="text-sm bg-gray-50 p-2 rounded">{selectedCosting.completeDetails.ppBagSmall || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-gray-500">Remarks 1</Label>
-                    <p className="text-sm bg-gray-50 p-2 rounded">{selectedCosting.completeDetails.remarks1 || "N/A"}</p>
-                  </div>
-                </div>
-              </div>
+
+              {/* Section 3: Costing Response Data (from Costing Response Sheet) */}
+              {(() => {
+                const response = costingResponses.find(r => r.serialNumber === selectedCosting?.completeDetails?.serialNumber);
+                if (response) {
+                  return (
+                    <div className="space-y-3">
+                      <h3 className="text-md font-semibold flex items-center gap-2 text-violet-700 bg-violet-50 p-2 rounded">
+                        <DollarSign className="h-4 w-4" /> Costing Details from Analysis
+                      </h3>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-4 border border-violet-100 rounded-lg">
+                        <div className="space-y-1">
+                          <Label className="text-xs text-gray-500">VARIABLE COST</Label>
+                          <p className="text-sm font-bold text-violet-700">₹{response.variableCost || "-"}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-gray-500">Manufacturing Cost</Label>
+                          <p className="text-sm font-bold text-violet-700">₹{response.manufacturingCost || "-"}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-gray-500">Interest (days)</Label>
+                          <p className="text-sm font-bold text-slate-700">{response.interestDays || "-"}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-gray-500">Interest Cost</Label>
+                          <p className="text-sm font-bold text-violet-700">₹{response.interestCost || "-"}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-gray-500">Transporting (FOR)</Label>
+                          <p className="text-sm font-bold text-violet-700">₹{response.transporting || "-"}</p>
+                        </div>
+                        <div className="space-y-1 text-primary">
+                          <Label className="text-xs text-primary font-bold">SELLING PRICE</Label>
+                          <p className="text-lg font-black">₹{response.sellingPrice || "-"}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               {/* Section 4: Planning and Actual Data */}
               <div className="space-y-3">

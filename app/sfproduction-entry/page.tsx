@@ -124,8 +124,8 @@ const processGvizTable = (table: any): any[] => {
 };
 
 const isSJCPending = (record: SemiJobCardRecord): boolean => {
-    const hasPlanned = record.planned && record.planned !== '' && record.planned !== 'null';
-    const hasActual = record.actual && record.actual !== '' && record.actual !== 'null';
+    const hasPlanned = Boolean(record.planned && record.planned !== '' && record.planned !== 'null');
+    const hasActual = Boolean(record.actual && record.actual !== '' && record.actual !== 'null');
     return hasPlanned && !hasActual;
 };
 
@@ -550,17 +550,6 @@ export default function SemiActualProductionPage() {
                                                     >
                                                         <Pencil size={12} />
                                                         Perform Test
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            // View info for job card
-                                                            const match = semiActualData.find(a => a.semiFinishedJobCardNo === job.sjcSrNo);
-                                                            if (match) { setSelectedActual(match); setIsViewModalOpen(true); }
-                                                        }}
-                                                        className="flex items-center gap-2 px-4 py-2 border border-violet-300 text-violet-700 hover:bg-violet-50 text-xs font-semibold rounded-lg transition-colors"
-                                                    >
-                                                        <Eye size={12} />
-                                                        View
                                                     </button>
                                                 </div>
                                             </td>
@@ -1073,29 +1062,7 @@ export default function SemiActualProductionPage() {
                                 </div>
                             </div>
 
-                            {/* Additional Details */}
-                            <div className="bg-slate-50 p-4 rounded-xl">
-                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Additional Details</div>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                    {[
-                                        { label: 'Status', value: selectedActual.status },
-                                        { label: 'Final Qty', value: selectedActual.finalQty ? String(selectedActual.finalQty) : '-' },
-                                        { label: 'Planned 1', value: selectedActual.planned1 || '-' },
-                                        { label: 'Actual 1', value: selectedActual.actual1 || '-' },
-                                        { label: 'Time Delay 1', value: selectedActual.timeDelay1 || '-' },
-                                        { label: 'Actual Qty 1', value: selectedActual.actualQty1 ? String(selectedActual.actualQty1) : '-' },
-                                        { label: 'Planned 2', value: selectedActual.planned2 || '-' },
-                                        { label: 'Actual 2', value: selectedActual.actual2 || '-' },
-                                        { label: 'Time Delay 2', value: selectedActual.timeDelay2 || '-' },
-                                        { label: 'Actual Qty 2', value: selectedActual.actualQty2 ? String(selectedActual.actualQty2) : '-' },
-                                    ].map(({ label, value }) => (
-                                        <div key={label}>
-                                            <div className="text-[10px] text-slate-400 uppercase font-semibold mb-0.5">{label}</div>
-                                            <div className="text-xs text-slate-700">{value || '-'}</div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
+
 
                             <div className="flex justify-end pt-1">
                                 <button onClick={() => setIsViewModalOpen(false)}

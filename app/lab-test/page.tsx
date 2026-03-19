@@ -95,7 +95,7 @@ const PENDING_COLUMNS_META = [
   { header: "Manufacturing Cost", dataKey: "manufacturingCost", toggleable: true },
   { header: "Interest (days)", dataKey: "interestDays", toggleable: true },
   { header: "Interest Cost", dataKey: "interestCost", toggleable: true },
-  { header: "Transporting (FOR)", dataKey: "transportingFor", toggleable: true },
+  // { header: "Transporting (FOR)", dataKey: "transportingFor", toggleable: true },
   { header: "SELLING PRICE", dataKey: "sellingPrice", toggleable: true },
 ]
 

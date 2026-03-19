@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { useGoogleSheet, parseGvizDate } from "@/lib/g-sheets";
+import { useGoogleSheet } from "@/lib/g-sheets"; // Used for Master sheet only; Semi Production uses doGet for reliable text-timestamp support
 
 // Type Definitions
 interface SemiProductionItem {
@@ -31,6 +31,8 @@ interface SemiProductionItem {
     status: string;
     planned: string;
     actual: string;
+    firmName: string;
+    reason: string;
 }
 
 interface MasterItem {
@@ -51,9 +53,11 @@ const SEMI_COLUMNS_META = [
     { header: "Total Qty", dataKey: "qty", toggleable: true },
     { header: "Produced", dataKey: "totalMade", toggleable: true },
     { header: "Pending", dataKey: "pending", toggleable: true },
+    { header: "Cancelled Qty", dataKey: "cancelOrder", toggleable: true },
     { header: "Efficiency", dataKey: "efficiency", alwaysVisible: true, toggleable: false },
     { header: "Notes", dataKey: "notes", toggleable: true },
-    { header: "Cancel Order", dataKey: "cancelOrder", toggleable: true },
+    { header: "Firm Name", dataKey: "firmName", toggleable: true },
+    { header: "Reason", dataKey: "reason", toggleable: true },
     { header: "Actions", dataKey: "actions", alwaysVisible: true, toggleable: false },
 ];
 
@@ -70,6 +74,8 @@ interface SemiProductionRecord {
     status: string;
     planned: string;
     actual: string;
+    firmName: string;
+    reason: string;
 }
 
 export default function Step1List() {
@@ -83,6 +89,7 @@ export default function Step1List() {
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
     const [cancelRecord, setCancelRecord] = useState<SemiProductionItem | null>(null);
     const [cancelQty, setCancelQty] = useState<number | ''>('');
+    const [cancelReason, setCancelReason] = useState("");
     const [isCancelSubmitting, setIsCancelSubmitting] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
 
@@ -96,7 +103,6 @@ export default function Step1List() {
 
     const [formErrors, setFormErrors] = useState<Record<string, string | null>>({});
 
-    const { fetchData: fetchSemiProductionData } = useGoogleSheet(SEMI_PRODUCTION_SHEET);
     const { fetchData: fetchMasterData } = useGoogleSheet(MASTER_SHEET);
 
     // Auto-dismiss success toast after 3s
@@ -106,73 +112,101 @@ export default function Step1List() {
         return () => clearTimeout(t);
     }, [successMessage]);
 
+    // ─── Fetch Semi Production via Google Visualization (gviz) API ───────────────
+    // This bypasses the Apps Script doGet entirely and reads the sheet data directly.
+    // Same reliable method already used for the Master sheet.
+    const SHEET_ID = "1Oh16UfYFmNff0YLxHRh_D3mw3r7m7b9FOvxRpJxCUh4";
+
+    const fetchSemiProductionGviz = useCallback(async (): Promise<SemiProductionItem[]> => {
+        const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SEMI_PRODUCTION_SHEET)}&headers=0&cb=${Date.now()}`;
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`Network error: ${res.status}`);
+        const text = await res.text();
+        const match = text.match(/google\.visualization\.Query\.setResponse\((.*)\)/);
+        if (!match || !match[1]) throw new Error("Could not parse gviz response for Semi Production sheet.");
+        const json = JSON.parse(match[1]);
+        if (!json.table) throw new Error("Invalid gviz data structure.");
+
+        const table = json.table;
+        const rows: any[] = table.rows || [];
+        const items: SemiProductionItem[] = [];
+
+        // First 5 rows (indices 0-4) are header/metadata rows — skip them
+        const DATA_START_ROW = 5;
+
+        for (let i = DATA_START_ROW; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || !row.c) continue;
+
+            const getCell = (idx: number): string => {
+                const cell = row.c[idx];
+                if (!cell) return "";
+                // gviz returns formatted string in cell.f, raw value in cell.v
+                return cell.f !== undefined && cell.f !== null
+                    ? String(cell.f)
+                    : (cell.v !== null && cell.v !== undefined ? String(cell.v) : "");
+            };
+
+            // Skip completely empty rows
+            if (row.c.every((c: any) => !c || c.v === null || c.v === "" || c.v === undefined)) continue;
+
+            const tsCell = getCell(0).trim();
+            if (!tsCell) continue;
+
+            // Only include rows that have a valid SF-Sr No. in column B (e.g. "SF-1", "SF-2")
+            const sfSrNo = getCell(1).trim();
+            if (!sfSrNo.toUpperCase().startsWith("SF-")) continue;
+
+            items.push({
+                _rowIndex: i + 1, // 1-based row index for Apps Script updates
+                timestamp: tsCell,
+                sfSrNo: sfSrNo,
+                nameOfSemiFinished: getCell(2),
+                qty: Number(getCell(3)) || 0,
+                notes: getCell(4),
+                totalPlanned: Number(getCell(5)) || 0,
+                totalMade: Number(getCell(6)) || 0,
+                pending: Number(getCell(7)) || 0,
+                cancelOrder: getCell(8),
+                status: getCell(9) || "PENDING",
+                planned: getCell(10),
+                actual: getCell(11),
+                firmName: getCell(12),
+                reason: getCell(13),
+            });
+        }
+        return items;
+    }, []);
+
     const loadAllData = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const [semiProductionTable, masterTable] = await Promise.all([
-                fetchSemiProductionData(),
-                fetchMasterData(),
-            ]);
+            // Fetch Semi Production via gviz (bypasses Apps Script doGet)
+            const semiItems = await fetchSemiProductionGviz();
+            setSemiProductions(semiItems.sort((a, b) => b._rowIndex - a._rowIndex));
+
+            // Fetch Master sheet using gviz
+            const masterTable = await fetchMasterData();
 
             const processGvizTable = (table: any) => {
-                if (!table || !table.rows || table.rows.length === 0) {
-                    return [];
-                }
-
+                if (!table || !table.rows || table.rows.length === 0) return [];
                 const firstDataRowIndex = table.rows.findIndex((r: any) => r && r.c && r.c.some((cell: any) => cell && cell.v !== null && cell.v !== ''));
-                if (firstDataRowIndex === -1) {
-                    return [];
-                }
-
+                if (firstDataRowIndex === -1) return [];
                 const colIds = table.cols.map((col: any) => col.id);
                 const dataRows = table.rows.slice(firstDataRowIndex);
-
-                const processedData = dataRows.map((row, rowIndex) => {
-                    if (!row || !row.c || row.c.every(cell => !cell || cell.v === null || cell.v === '')) {
-                        return null;
-                    }
-
-                    const rowData: any = {
-                        _rowIndex: firstDataRowIndex + rowIndex + 1
-                    };
-
-                    row.c.forEach((cell, cellIndex) => {
+                return dataRows.map((row: any, rowIndex: number) => {
+                    if (!row || !row.c || row.c.every((cell: any) => !cell || cell.v === null || cell.v === '')) return null;
+                    const rowData: any = { _rowIndex: firstDataRowIndex + rowIndex + 1 };
+                    row.c.forEach((cell: any, cellIndex: number) => {
                         const colId = colIds[cellIndex];
-                        if (colId) {
-                            rowData[colId] = cell ? cell.v : null;
-                        }
+                        if (colId) rowData[colId] = cell ? cell.v : null;
                     });
-
                     return rowData;
                 }).filter(Boolean);
-
-                return processedData;
             };
 
-            const semiProductionRows = processGvizTable(semiProductionTable);
             const masterDataRows = processGvizTable(masterTable);
-
-            // Process Semi Production data — only rows where Column A is a real gviz Date (skips header/metadata rows)
-            const semiItems: SemiProductionItem[] = semiProductionRows
-                .filter((row: any) => row.A && typeof row.A === 'string' && row.A.startsWith('Date('))
-                .map((row: any) => ({
-                    _rowIndex: row._rowIndex,
-                    timestamp: row.A ? format(parseGvizDate(row.A) || new Date(), "dd/MM/yyyy HH:mm:ss") : "",
-                    sfSrNo: String(row.B || ""),
-                    nameOfSemiFinished: String(row.C || ""),
-                    qty: Number(row.D || 0),
-                    notes: String(row.E || ""),
-                    totalPlanned: Number(row.F || 0),
-                    totalMade: Number(row.G || 0),
-                    pending: Number(row.H || 0),
-                    cancelOrder: String(row.I || ""),
-                    status: String(row.J || "PENDING"),
-                    planned: String(row.K || ""),
-                    actual: String(row.L || ""),
-                }));
-
-            setSemiProductions(semiItems.sort((a, b) => b._rowIndex - a._rowIndex));
 
             // Get product names from Master sheet - Column M (Name Of Raw Material, index 12)
             const materials: string[] = [...new Set(masterDataRows.map((row: any) => String(row.M || "")).filter(Boolean))] as string[];
@@ -182,13 +216,14 @@ export default function Step1List() {
             const firms: string[] = [...new Set(masterDataRows.map((row: any) => String(row.G || "")).filter(Boolean))] as string[];
             setFirmsList(firms);
 
-        } catch (err) {
+        } catch (err: unknown) {
+            const errMsg = err instanceof Error ? err.message : String(err);
             console.error("Error in loadAllData:", err);
-            setError(`Failed to load data. Error: ${err.message}`);
+            setError(`Failed to load data. ${errMsg}`);
         } finally {
             setLoading(false);
         }
-    }, [fetchSemiProductionData, fetchMasterData]);
+    }, [fetchMasterData, fetchSemiProductionGviz]);
 
     useEffect(() => {
         loadAllData();
@@ -207,21 +242,22 @@ export default function Step1List() {
             setFormData(prev => ({ ...prev, sfSrNo: latestNo }));
         } catch (error) {
             console.error('Error generating SF number:', error);
-            setFormData(prev => ({ ...prev, sfSrNo: 'SF-100' }));
+            setFormData(prev => ({ ...prev, sfSrNo: 'SF-1' }));
         }
     };
 
     const fetchLatestSFSrNo = async (productions: SemiProductionItem[]): Promise<string> => {
         if (!productions || productions.length === 0) {
-            return 'SF-100';
+            return 'SF-1';
         }
 
         const sfNumbers = productions
             .map(p => p.sfSrNo)
             .filter(no => no && no.startsWith('SF-'))
-            .map(no => parseInt(no.replace('SF-', '')) || 0);
+            .map(no => parseInt(no.replace('SF-', '')) || 0)
+            .filter(n => !isNaN(n));
 
-        const maxNumber = sfNumbers.length > 0 ? Math.max(...sfNumbers) : 99;
+        const maxNumber = sfNumbers.length > 0 ? Math.max(...sfNumbers) : 0;
         return `SF-${maxNumber + 1}`;
     };
 
@@ -249,9 +285,9 @@ export default function Step1List() {
                 formData.name,        // Column C: Name Of Semi Finished Good
                 qty,                  // Column D: Qty
                 formData.notes || "", // Column E: Notes
-                0,                    // Column F: Total Planned (initial)
-                0,                    // Column G: Total Made (initial)
-                qty,                  // Column H: Pending (initial = qty)
+                "",                   // Column F: Total Planned
+                "",                   // Column G: Total Made
+                "",                   // Column H: Pending
                 "",                   // Column I: Cancel Order (empty initially)
                 "",                   // Column J: Status (not submitted)
                 "",                   // Column K: Planned (empty)
@@ -295,18 +331,20 @@ export default function Step1List() {
 
             // Update the record with cancel information
             const updatedRowData = [
-                timestamp,                                // Column A: Timestamp
+                cancelRecord.timestamp,                   // Column A: Original Timestamp
                 cancelRecord.sfSrNo,                      // Column B
                 cancelRecord.nameOfSemiFinished,          // Column C
                 cancelRecord.qty,                         // Column D
                 cancelRecord.notes,                       // Column E
                 cancelRecord.totalPlanned,                // Column F
                 cancelRecord.totalMade,                   // Column G
-                cancelRecord.cancelQty, // Column H: pending
-                "",                                       // Column J: Status (not submitted)
+                Number(cancelRecord.pending) - Number(cancelQty), // Column H: Pending decreases
+                Number(cancelQty),                        // Column I: Cancel Order qty
+                "",                                       // Column J: Status (Cleared as requested)
                 cancelRecord.planned,                     // Column K
                 cancelRecord.actual,                      // Column L
-                ""                                        // Column M: Firm Name (preserve blank on cancel)
+                cancelRecord.firmName,                    // Column M
+                cancelReason                              // Column N: Reason
             ];
 
             const updateBody = new URLSearchParams({
@@ -323,10 +361,11 @@ export default function Step1List() {
                 throw new Error(updateResult.error || "Failed to cancel order.");
             }
 
-            setSuccessMessage(`Cancel order for ${cancelRecord.sfSrNo} submitted successfully!`);
+            setSuccessMessage(`Order ${cancelRecord.sfSrNo} cancelled successfully!`);
             setIsCancelModalOpen(false);
             setCancelRecord(null);
             setCancelQty('');
+            setCancelReason('');
             await loadAllData();
         } catch (err) {
             console.error('Error submitting cancel order:', err);
@@ -476,6 +515,11 @@ export default function Step1List() {
                                                     {item.pending}
                                                 </TableCell>
 
+                                                {/* Cancelled Qty */}
+                                                <TableCell className="whitespace-nowrap text-sm font-medium text-red-600">
+                                                    {item.cancelOrder || '-'}
+                                                </TableCell>
+
                                                 {/* Efficiency */}
                                                 <TableCell className="whitespace-nowrap">
                                                     <div className="flex items-center gap-2">
@@ -494,9 +538,14 @@ export default function Step1List() {
                                                     {item.notes || '-'}
                                                 </TableCell>
 
-                                                {/* Cancel Order */}
-                                                <TableCell className="whitespace-nowrap text-sm text-red-600">
-                                                    {item.cancelOrder || '-'}
+                                                {/* Firm Name */}
+                                                <TableCell className="whitespace-nowrap text-sm text-slate-600">
+                                                    {item.firmName || '-'}
+                                                </TableCell>
+                                                
+                                                {/* Reason */}
+                                                <TableCell className="max-w-[120px] truncate text-sm text-red-500" title={item.reason}>
+                                                    {item.reason || '-'}
                                                 </TableCell>
 
                                                 {/* Actions */}
@@ -505,6 +554,7 @@ export default function Step1List() {
                                                         onClick={() => {
                                                             setCancelRecord(item);
                                                             setCancelQty('');
+                                                            setCancelReason('');
                                                             setIsCancelModalOpen(true);
                                                         }}
                                                         variant="ghost"
@@ -677,7 +727,6 @@ export default function Step1List() {
                                 </div>
                             </div>
 
-                            {/* Cancel Quantity */}
                             <div className="space-y-2">
                                 <Label htmlFor="cancelQty">Cancel Quantity *</Label>
                                 <Input
@@ -694,6 +743,19 @@ export default function Step1List() {
                                 </p>
                             </div>
 
+                            {/* Cancel Reason */}
+                            <div className="space-y-2">
+                                <Label htmlFor="cancelReason">Reason for Cancellation *</Label>
+                                <Textarea
+                                    id="cancelReason"
+                                    value={cancelReason}
+                                    onChange={(e) => setCancelReason(e.target.value)}
+                                    placeholder="Enter reason for cancelling..."
+                                    rows={3}
+                                    required
+                                />
+                            </div>
+
                             {/* Actions */}
                             <div className="flex justify-end gap-2 pt-4">
                                 <Button
@@ -706,7 +768,7 @@ export default function Step1List() {
                                 </Button>
                                 <Button
                                     type="submit"
-                                    disabled={isCancelSubmitting || cancelQty === '' || Number(cancelQty) <= 0}
+                                    disabled={isCancelSubmitting || cancelQty === '' || Number(cancelQty) <= 0 || !cancelReason.trim()}
                                     className="bg-red-500 text-white hover:bg-red-600"
                                 >
                                     {isCancelSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

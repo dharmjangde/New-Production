@@ -34,6 +34,8 @@ interface Order {
   expectedDeliveryDate: string
   priority: string
   note: string
+  totalMade?: number   // ✅ ADD THIS
+
 }
 
 interface JobCard {
@@ -78,6 +80,7 @@ const PENDING_ORDERS_COLUMNS_META = [
   { header: "Party Name", dataKey: "partyName", toggleable: true },
   { header: "Product Name", dataKey: "productName", toggleable: true },
   { header: "Order Quantity", dataKey: "orderQuantity", toggleable: true },
+  { header: "Total Made", dataKey: "totalMade", toggleable: true },
   { header: "Planned Date", dataKey: "plannedDate", toggleable: true }, // ✅ ADDED
 
   { header: "Expected Delivery Date", dataKey: "expectedDeliveryDate", toggleable: true },
@@ -213,6 +216,7 @@ export default function JobCardsPage() {
           expectedDeliveryDate: prodRow && prodRow.G ? format(parseGvizDate(prodRow.G), "dd/MM/yyyy") : "",
           plannedDate: row.BO ? format(parseGvizDate(row.BO), "dd/MM/yy") : "",
           priority: prodRow ? String(prodRow.H || "") : "",
+          totalMade: Number(row.BL || 0), // ✅ BL column se value
           note: "",
         }
       })
@@ -298,7 +302,7 @@ export default function JobCardsPage() {
       dateOfProduction: new Date(),
       shift: "",
       notes: "",
-      totalMade: order.orderQuantity.toString(),
+      totalMade: "",
     })
     setFormErrors({})
     setIsDialogOpen(true)
@@ -506,6 +510,15 @@ export default function JobCardsPage() {
     () => HISTORY_COLUMNS_META.filter((col) => visibleHistoryColumns[col.dataKey]),
     [visibleHistoryColumns],
   )
+
+ const pendingQty = useMemo(() => {
+  if (!selectedOrder) return 0
+
+  // ✅ ALWAYS from sheet (NOT from input)
+  const total = Number(selectedOrder.totalMade || 0)
+
+  return selectedOrder.orderQuantity - total
+}, [selectedOrder])
 
   if (loading)
     return (
@@ -823,6 +836,11 @@ export default function JobCardsPage() {
                   <Input value={selectedOrder?.orderQuantity} readOnly type="number" className="bg-muted" />
                 </div>
               </div>
+               {selectedOrder && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Pending Qty: {pendingQty}
+                </p>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
                 <div>

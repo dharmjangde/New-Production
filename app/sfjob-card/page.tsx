@@ -131,9 +131,59 @@ export default function SFJobCardPage() {
     });
 
     // useGoogleSheet hooks for reading
-    const { fetchData: fetchSemiProdData } = useGoogleSheet(SEMI_PRODUCTION_SHEET);
     const { fetchData: fetchSemiJobCardData } = useGoogleSheet(SEMI_JOB_CARD_SHEET);
     const { fetchData: fetchMasterData } = useGoogleSheet(MASTER_SHEET);
+
+    // Direct gviz fetch for Semi Production — skips header rows properly
+    const SHEET_ID = "1Oh16UfYFmNff0YLxHRh_D3mw3r7m7b9FOvxRpJxCUh4";
+    const fetchSemiProductionDirect = useCallback(async (): Promise<SemiProductionRecord[]> => {
+        const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SEMI_PRODUCTION_SHEET)}&headers=0&cb=${Date.now()}`;
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`Network error: ${res.status}`);
+        const text = await res.text();
+        const match = text.match(/google\.visualization\.Query\.setResponse\((.*)\)/);
+        if (!match || !match[1]) throw new Error('Could not parse gviz for Semi Production.');
+        const json = JSON.parse(match[1]);
+        if (!json.table) throw new Error('Invalid gviz data.');
+
+        const rows: any[] = json.table.rows || [];
+        const DATA_START_ROW = 5; // rows 0-4 are metadata/header rows
+        const items: SemiProductionRecord[] = [];
+
+        for (let i = DATA_START_ROW; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || !row.c) continue;
+            if (row.c.every((c: any) => !c || c.v === null || c.v === undefined || c.v === '')) continue;
+
+            const getCell = (idx: number): string => {
+                const cell = row.c[idx];
+                if (!cell) return '';
+                return cell.f !== undefined && cell.f !== null
+                    ? String(cell.f)
+                    : (cell.v !== null && cell.v !== undefined ? String(cell.v) : '');
+            };
+
+            const sfSrNo = getCell(1).trim();
+            if (!sfSrNo.toUpperCase().startsWith('SF-')) continue;
+
+            items.push({
+                _rowIndex: i + 1,
+                timestamp: getCell(0),
+                sfSrNo,
+                nameOfSemiFinished: getCell(2),
+                qty: Number(getCell(3)) || 0,
+                notes: getCell(4),
+                totalPlanned: Number(getCell(5)) || 0,
+                totalMade: Number(getCell(6)) || 0,
+                pending: Number(getCell(7)) || 0,
+                cancelOrder: getCell(8),
+                status: getCell(9) || '',
+                planned: getCell(10),
+                actual: getCell(11),
+            });
+        }
+        return items;
+    }, []);
 
     // Auto-dismiss success toast
     useEffect(() => {
@@ -146,38 +196,18 @@ export default function SFJobCardPage() {
         setIsLoading(true);
         setLoadError('');
         try {
-            const [semiProdTable, semiJobCardTable, masterTable] = await Promise.all([
-                fetchSemiProdData(),
+            const [semiJobCardTable, masterTable] = await Promise.all([
                 fetchSemiJobCardData(),
                 fetchMasterData(),
             ]);
 
-            // ── Process Semi Production data ──
-            const semiProdRows = processGvizTable(semiProdTable);
-            const productions: SemiProductionRecord[] = semiProdRows
-                .filter((row: any) => row.B && typeof row.B === 'string' && row.B.startsWith('SF-'))
-                .map((row: any) => ({
-                    _rowIndex: row._rowIndex,
-                    timestamp: row.A ? format(parseGvizDate(row.A) || new Date(), "dd/MM/yy HH:mm:ss") : "",
-                    sfSrNo: String(row.B || ""),
-                    nameOfSemiFinished: String(row.C || ""),
-                    qty: Number(row.D || 0),
-                    notes: String(row.E || ""),
-                    totalPlanned: Number(row.F || 0),
-                    totalMade: Number(row.G || 0),
-                    pending: Number(row.H || 0),
-                    cancelOrder: String(row.I || ""),
-                    status: String(row.J || ""),
-                    planned: row.K ? String(row.K) : "",   // Column K
-                    actual: row.L ? String(row.L) : "",    // Column L
-                }));
-
+            // ── Process Semi Production data (direct gviz, skips header rows) ──
+            const productions = await fetchSemiProductionDirect();
             setProductionData(productions.sort((a, b) => b._rowIndex - a._rowIndex));
 
-            // ── Process Semi Job Card data ──
             const jobCardRows = processGvizTable(semiJobCardTable);
             const jobCards: SemiJobCardRecord[] = jobCardRows
-                .filter((row: any) => row.B && typeof row.B === 'string' && row.B.startsWith('SJC-'))
+                .filter((row: any) => row.B && typeof row.B === 'string' && /^SJC-\d+/.test(row.B))
                 .map((row: any) => {
                     let dateOfProduction = '';
                     if (row.G) {
@@ -204,18 +234,15 @@ export default function SFJobCardPage() {
 
             // ── Process Master data for supervisors ──
             const masterRows = processGvizTable(masterTable);
-            // Try to find the supervisor column (usually column A or B in Master)
             const supSet = new Set<string>();
             masterRows.forEach((row: any) => {
-                // Try common columns used for supervisor names
-                ['A', 'B', 'C'].forEach(col => {
-                    const val = String(row[col] || '').trim();
-                    if (val && val.length > 1 && val.length < 40 && !/^\d+$/.test(val) && !val.includes('@')) {
-                        supSet.add(val);
-                    }
-                });
+                // Specifically use Column L (SF Supervisor Name) as requested
+                const val = String(row.L || '').trim();
+                if (val && val !== 'null' && val !== 'undefined') {
+                    supSet.add(val);
+                }
             });
-            setSupervisors(Array.from(supSet).map(name => ({ name })));
+            setSupervisors(Array.from(supSet).sort().map(name => ({ name })));
 
         } catch (err: any) {
             console.error('Error loading SF Job Card data:', err);
@@ -223,7 +250,7 @@ export default function SFJobCardPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [fetchSemiProdData, fetchSemiJobCardData, fetchMasterData]);
+    }, [fetchSemiProductionDirect, fetchSemiJobCardData, fetchMasterData]);
 
     useEffect(() => {
         loadAllData();
@@ -412,7 +439,9 @@ export default function SFJobCardPage() {
                                             <TableHead className="whitespace-nowrap text-xs font-semibold">Actions</TableHead>
                                             <TableHead className="whitespace-nowrap text-xs font-semibold">SF Sr. No.</TableHead>
                                             <TableHead className="whitespace-nowrap text-xs font-semibold">Product Name</TableHead>
-                                            <TableHead className="whitespace-nowrap text-xs font-semibold">Quantity</TableHead>
+                                            <TableHead className="whitespace-nowrap text-xs font-semibold">Total Qty</TableHead>
+                                            <TableHead className="whitespace-nowrap text-xs font-semibold">Total Made</TableHead>
+                                            <TableHead className="whitespace-nowrap text-xs font-semibold">Pending Qty</TableHead>
                                             <TableHead className="whitespace-nowrap text-xs font-semibold">Planned (K)</TableHead>
                                             <TableHead className="whitespace-nowrap text-xs font-semibold">Actual (L)</TableHead>
                                             <TableHead className="whitespace-nowrap text-xs font-semibold">Notes</TableHead>
@@ -438,8 +467,17 @@ export default function SFJobCardPage() {
                                                 <TableCell className="whitespace-nowrap">
                                                     <div className="font-medium text-slate-800">{order.nameOfSemiFinished}</div>
                                                 </TableCell>
+                                                {/* Total Qty */}
                                                 <TableCell className="whitespace-nowrap text-sm font-medium text-slate-700">
                                                     {order.qty}
+                                                </TableCell>
+                                                {/* Total Made (col G) */}
+                                                <TableCell className="whitespace-nowrap text-sm font-medium text-purple-600">
+                                                    {order.totalMade}
+                                                </TableCell>
+                                                {/* Pending Qty (col H) */}
+                                                <TableCell className="whitespace-nowrap text-sm font-medium text-amber-600">
+                                                    {order.pending}
                                                 </TableCell>
                                                 <TableCell className="whitespace-nowrap">
                                                     {order.planned ? (

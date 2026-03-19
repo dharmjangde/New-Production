@@ -54,7 +54,7 @@ const JOBCARD_COLUMNS_META = [
   { header: "Priority", dataKey: "priority", toggleable: true },
   { header: "Status", dataKey: "status", toggleable: true },
   { header: "CRM Name", dataKey: "crmName", toggleable: true },
-  { header: "Order Cancel", dataKey: "orderCancel", toggleable: true },
+  { header: "Cancel Qty", dataKey: "orderCancel", toggleable: true },
   { header: "Cancel Reason", dataKey: "cancelReason", toggleable: true },
   { header: "Actual Planned", dataKey: "actualProductionPlanned", toggleable: true },
   { header: "Actual Done", dataKey: "actualProductionDone", toggleable: true },
@@ -162,7 +162,7 @@ export default function OrdersPage() {
       // बाकी सब hidden by default
       priority: false,
       crmName: false,
-      orderCancel: false,
+      orderCancel: true,
       cancelReason: true,
       dateOfCompletePlanning: false,
       note: false,
@@ -349,7 +349,7 @@ export default function OrdersPage() {
       rowDataArray[15] = "";                                    // P: Quantity In Stock
       rowDataArray[16] = "";                                    // Q: Planning Pending
       rowDataArray[17] = "";                                    // R: Production Pending
-      rowDataArray[18] = "Pending";                             // S: Status
+      rowDataArray[18] = "";                             // S: Status
       rowDataArray[19] = "";                                    // T: Date Of Complete Planning
       // U to Z are empty (columns 20-25)
       rowDataArray[26] = "";                                    // AA: Cancel Reason
@@ -520,8 +520,8 @@ export default function OrdersPage() {
     switch (status?.toLowerCase()) {
       case 'pending':
         return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>
-      case 'in progress':
-        return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">In Progress</Badge>
+      // case 'in progress':
+        // return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">In Progress</Badge>
       case 'completed':
         return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Completed</Badge>
       case 'cancelled':
@@ -671,19 +671,21 @@ export default function OrdersPage() {
             </p>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
+        {/* <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
           <CardContent className="p-4">
             <p className="text-xs sm:text-sm text-blue-600 font-medium">In Progress</p>
             <p className="text-xl sm:text-2xl font-bold text-gray-900">
               {productionData.filter(item => item.status?.toLowerCase() === 'in progress' || item.status?.toLowerCase() === 'in-progress').length}
             </p>
           </CardContent>
-        </Card>
+        </Card> */}
         <Card className="bg-gradient-to-br from-green-50 to-white border-green-100">
           <CardContent className="p-4">
             <p className="text-xs sm:text-sm text-green-600 font-medium">Completed</p>
             <p className="text-xl sm:text-2xl font-bold text-gray-900">
-              {productionData.filter(item => item.status?.toLowerCase() === 'completed').length}
+{productionData.filter(item =>
+  ['completed', 'complete', 'done'].includes(item.status?.toLowerCase())
+).length}
             </p>
           </CardContent>
         </Card>
@@ -733,15 +735,14 @@ export default function OrdersPage() {
                         <TableCell key={col.dataKey} className="whitespace-nowrap text-xs sm:text-sm py-2 px-3">
                           {col.dataKey === "action" ? (
                             <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => handleCancelOrder(item)}
-                              disabled={!!item.orderCancel}
-                              className={item.orderCancel ? "opacity-50 cursor-not-allowed" : ""}
-                            >
-                              <XCircle className="h-4 w-4 mr-1" />
-                              {item.orderCancel ? "Cancelled" : "Cancel"}
-                            </Button>
+  variant="destructive"
+  size="sm"
+  onClick={() => handleCancelOrder(item)}
+  className={item.orderCancel ? "opacity-70" : ""}
+>
+  <XCircle className="h-4 w-4 mr-1" />
+  {item.orderCancel ? "Cancelled" : "Cancel"}
+</Button>
                           ) : col.dataKey === "priority" ? (
                             getPriorityBadge(item.priority)
                           ) : col.dataKey === "status" ? (

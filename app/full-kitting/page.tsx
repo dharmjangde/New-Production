@@ -150,7 +150,8 @@ export default function CheckPage() {
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<CostingHistoryItem | null>(null)
   const [kittingFormRows, setKittingFormRows] = useState<KittingFormRow[]>([])
   const [showPreview, setShowPreview] = useState(false)
-
+const [transportingCost, setTransportingCost] = useState("0")
+// const [sellingPrice, setSellingPrice] = useState("0")
   // State for viewing raw materials
   const [viewingMaterials, setViewingMaterials] = useState<{names: string[], percentages: string[]} | null>(null)
 
@@ -186,7 +187,6 @@ export default function CheckPage() {
         return format(date, "dd/MM/yyyy")
       }
     } catch (e) {
-      // Ignore
     }
     
     return String(dateValue)
@@ -195,7 +195,7 @@ export default function CheckPage() {
   const processGvizTable = (table: any) => {
     if (!table || !table.rows) return []
     return table.rows.map((row: any, index: number) => {
-      const rowData: { [key: string]: any } = { _rowIndex: index + 3 }
+const rowData: { [key: string]: any } = { _rowIndex: index + 1 }
       if (row.c) {
         row.c.forEach((cell: any, cellIndex: number) => {
           rowData[`col${cellIndex}`] = cell ? (cell.f ?? cell.v) : null
@@ -509,6 +509,13 @@ setIsKittingDialogOpen(true)
 
   const variableCost = useMemo(() => kittingTotals.price, [kittingTotals.price])
 
+  const finalSellingPrice = useMemo(() => {
+    return totalCost
+  }, [totalCost])
+
+  const gpPercentage = useMemo(() => {
+    return kittingTotals.percentage.toFixed(2) + "%"
+  }, [kittingTotals.percentage])
   const generateCompositionNumber = async (): Promise<string> => {
     const table = await fetchCostingResponseData()
     const rows = processGvizTable(table)
@@ -652,25 +659,25 @@ setIsKittingDialogOpen(true)
       const paddedRmNames = [...rmNames, ...Array(20 - rmNames.length).fill("")]
       const paddedRmQtys = [...rmQtys, ...Array(20 - rmQtys.length).fill("")]
 
-      const rowData = [
-        format(submissionDate, "dd/MM/yyyy HH:mm:ss"),
-        compositionNumber,
-        selectedCheck.deliveryOrderNo,
-        selectedCheck.productName,
-        variableCost.toFixed(2),
-        MANUFACTURING_COST.toString(),
-        INTEREST_DAYS.toString(),
-        interestAmount.toFixed(2),
-        "0", // transporting
-        "0", // selling price
-        "0%", // gp percentage
-        kittingTotals.al.toFixed(4),
-        kittingTotals.fe.toFixed(4),
-        kittingTotals.bd.toFixed(4),
-        kittingTotals.ap.toFixed(4),
-        ...paddedRmNames,
-        ...paddedRmQtys,
-      ]
+  const rowData = [
+  format(submissionDate, "dd/MM/yyyy HH:mm:ss"),
+  compositionNumber,
+  selectedCheck.deliveryOrderNo,
+  selectedCheck.productName,
+  variableCost.toFixed(2),
+  MANUFACTURING_COST.toString(),
+  INTEREST_DAYS.toString(),
+  interestAmount.toFixed(2),
+  transportingCost,
+  finalSellingPrice.toFixed(2),   // ✅ Column J
+  gpPercentage,                  // ✅ Column K
+  kittingTotals.al.toFixed(4),
+  kittingTotals.fe.toFixed(4),
+  kittingTotals.bd.toFixed(4),
+  kittingTotals.ap.toFixed(4),
+  ...paddedRmNames,
+  ...paddedRmQtys,
+]
 
       const costingBody = new URLSearchParams({
         sheetName: COSTING_RESPONSE_SHEET,

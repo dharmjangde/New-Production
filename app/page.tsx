@@ -62,6 +62,8 @@ const MASTER_SHEET = "Master"
 const COSTING_RESPONSE_SHEET = "Costing Response"
 const JOBCARDS_SHEET = "JobCards"
 const ACTUAL_PRODUCTION_SHEET = "Actual Production"
+const SEMI_PRODUCTION_SHEET = "Semi Production"
+const CRUSHING_ACTUAL_SHEET = "Crushing Actual"
 
 // --- STYLING ---
 const COLORS = {
@@ -147,6 +149,19 @@ interface JobCardRecord {
   status: string
 }
 
+interface SemiProductionRecord {
+  id: string
+  pending: number
+  totalMade: number
+  cancelOrder: number
+}
+
+interface CrushingActualRecord {
+  id: string
+  inputQty: number
+  outputQty: number
+}
+
 interface MasterData {
   firmNames: string[]
   partyNames: string[]
@@ -162,6 +177,8 @@ const useProductionData = () => {
   const [productionOrders, setProductionOrders] = useState<ProductionOrderRecord[]>([])
   const [actualProductionData, setActualProductionData] = useState<ActualProductionRecord[]>([])
   const [jobCardsData, setJobCardsData] = useState<JobCardRecord[]>([])
+  const [semiProductionData, setSemiProductionData] = useState<SemiProductionRecord[]>([])
+  const [crushingData, setCrushingData] = useState<CrushingActualRecord[]>([])
   const [kittingHistory, setKittingHistory] = useState<KittingHistoryRecord[]>([])
   const [masterData, setMasterData] = useState<MasterData>({
     firmNames: [],
@@ -241,6 +258,8 @@ const useProductionData = () => {
         costingResponseTable,
         jobCardsTable,
         actualProductionTable,
+        semiProductionTable,
+        crushingActualTable,
       ] = await Promise.all([
         fetchGoogleSheetData(ORDERS_SHEET),
         fetchGoogleSheetData(PRODUCTION_SHEET),
@@ -248,6 +267,8 @@ const useProductionData = () => {
         fetchGoogleSheetData(COSTING_RESPONSE_SHEET),
         fetchGoogleSheetData(JOBCARDS_SHEET),
         fetchGoogleSheetData(ACTUAL_PRODUCTION_SHEET),
+        fetchGoogleSheetData(SEMI_PRODUCTION_SHEET),
+        fetchGoogleSheetData(CRUSHING_ACTUAL_SHEET),
       ])
 
       const rawAllOrders = processGvizTableByIndex(ordersTable, 0)
@@ -256,6 +277,8 @@ const useProductionData = () => {
       const rawKittingHistory = processGvizTableByIndex(costingResponseTable, 0)
       const rawJobCards = processGvizTableByIndex(jobCardsTable, 0)
       const rawActualProduction = processGvizTableByIndex(actualProductionTable, 0)
+      const rawSemiProduction = processGvizTableByIndex(semiProductionTable, 0)
+      const rawCrushing = processGvizTableByIndex(crushingActualTable, 0)
 
       const processedAllOrders = rawAllOrders
         .map((row: any, index: number) => ({
@@ -369,10 +392,25 @@ const useProductionData = () => {
       const priorities = getUniqueOptions(rawMasterData, 0);
       const supervisors = getUniqueOptions(rawMasterData, 1);
 
+      const processedSemiProduction = rawSemiProduction.map((row: any, index: number) => ({
+        id: `semi-${index}`,
+        pending: Number(row.col7) || 0,
+        totalMade: Number(row.col6) || 0,
+        cancelOrder: Number(row.col8) || 0
+      }));
+
+      const processedCrushing = rawCrushing.map((row: any, index: number) => ({
+        id: `crushing-${index}`,
+        inputQty: Number(row.col3) || 0,
+        outputQty: (Number(row.col5) || 0) + (Number(row.col7) || 0) + (Number(row.col9) || 0) + (Number(row.col11) || 0)
+      }));
+
       setAllOrders(processedAllOrders)
       setProductionOrders(processedProductionOrders)
       setActualProductionData(processedActualProduction)
       setJobCardsData(processedJobCards)
+      setSemiProductionData(processedSemiProduction)
+      setCrushingData(processedCrushing)
       setKittingHistory(processedKittingHistory)
       setMasterData({ firmNames, partyNames, orderNumbers, products, priorities, supervisors })
     } catch (err: any) {
@@ -386,12 +424,12 @@ const useProductionData = () => {
     fetchData()
   }, [fetchData])
 
-  return { allOrders, productionOrders, actualProductionData, jobCardsData, kittingHistory, masterData, loading, error, refetch: fetchData }
+  return { allOrders, productionOrders, actualProductionData, jobCardsData, semiProductionData, crushingData, kittingHistory, masterData, loading, error, refetch: fetchData }
 }
 
 // --- MAIN DASHBOARD COMPONENT ---
 export default function ProductionDashboard() {
-  const { allOrders, productionOrders, actualProductionData, jobCardsData, kittingHistory, masterData, loading, error, refetch } = useProductionData()
+  const { allOrders, productionOrders, actualProductionData, jobCardsData, semiProductionData, crushingData, kittingHistory, masterData, loading, error, refetch } = useProductionData()
 
   // --- DERIVED METRICS ---
   const metrics = useMemo(() => {
@@ -403,15 +441,32 @@ export default function ProductionDashboard() {
     // Calculate completion rate
     const completionRate = totalOrders > 0 ? ((productionOrders.length / totalOrders) * 100).toFixed(1) : "0"
 
+    const costingPending = actualProductionData.filter(p => p.status !== 'Completed' || p.status === 'Pending').length; 
+    
+    // SF Prod Summary
+    const sfPending = semiProductionData.reduce((acc, item) => acc + item.pending, 0);
+    const sfCompleted = semiProductionData.reduce((acc, item) => acc + item.totalMade, 0);
+    const sfCancelled = semiProductionData.reduce((acc, item) => acc + item.cancelOrder, 0);
+
+    // Crushing Summary
+    const crushingInput = crushingData.reduce((acc, item) => acc + item.inputQty, 0);
+    const crushingOutput = crushingData.reduce((acc, item) => acc + item.outputQty, 0);
+
     return {
       totalOrders,
       pendingOrders,
       activeProduction,
       completedProduction,
       completionRate,
-      jobCards: jobCardsData.length
+      jobCards: jobCardsData.length,
+      costingPending,
+      sfPending,
+      sfCompleted,
+      sfCancelled,
+      crushingInput,
+      crushingOutput
     }
-  }, [allOrders, productionOrders, actualProductionData, jobCardsData])
+  }, [allOrders, productionOrders, actualProductionData, jobCardsData, semiProductionData, crushingData])
 
   // --- CHART DATA PREPARATION ---
 
@@ -612,6 +667,58 @@ export default function ProductionDashboard() {
         />
       </div>
 
+      {/* OVERALL STAGE INFORMATION GRID */}
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2 px-1">
+          <Factory className="h-5 w-5 text-purple-600" />
+          Production Stage Summary
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          <StageCard 
+            stage="Step 1: Orders" 
+            metric={`${metrics.totalOrders}`} 
+            label="Total D.O." 
+            color="border-l-blue-500" 
+            subMetric={`${metrics.pendingOrders} Waiting`}
+          />
+          <StageCard 
+            stage="Step 2: Planning" 
+            metric={`${metrics.activeProduction}`} 
+            label="In Production" 
+            color="border-l-indigo-500"
+            subMetric={`${metrics.completionRate}% Done`}
+          />
+          <StageCard 
+            stage="Step 3: SF Production" 
+            metric={`${metrics.sfPending}`} 
+            label="Pending SF" 
+            color="border-l-violet-500"
+            subMetric={`${metrics.sfCompleted} Produced`}
+          />
+          <StageCard 
+            stage="Step 4: Job Cards" 
+            metric={`${metrics.jobCards}`} 
+            label="Total Created" 
+            color="border-l-purple-500"
+            subMetric={`Active Batch`}
+          />
+          <StageCard 
+            stage="Step 5: Crushing" 
+            metric={`${Math.round(metrics.crushingInput)}`} 
+            label="Input (Kg)" 
+            color="border-l-pink-500"
+            subMetric={`${Math.round(metrics.crushingOutput)} Output`}
+          />
+          <StageCard 
+            stage="Step 6: Costing" 
+            metric={`${metrics.costingPending}`} 
+            label="Pending Cost" 
+            color="border-l-emerald-500"
+            subMetric={`${kittingHistory.length} Total`}
+          />
+        </div>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
 
         {/* LEFT COLUMN - MAIN CHARTS (Span 4) */}
@@ -745,6 +852,24 @@ function SummaryCard({ title, value, icon: Icon, trend, trendUp, color, bgColor 
         <p className="text-xs text-slate-500 mt-1 flex items-center">
           {trendUp ? <ArrowUpRight className="mr-1 h-3 w-3 text-emerald-500" /> : <ArrowDownRight className="mr-1 h-3 w-3 text-red-500" />}
           <span className={trendUp ? "text-emerald-500" : "text-slate-500"}>{trend}</span>
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
+
+function StageCard({ stage, metric, label, color, subMetric }: any) {
+  return (
+    <Card className={cn("shadow-sm border border-slate-200 border-l-4", color)}>
+      <CardContent className="p-4">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">{stage}</p>
+        <div className="flex items-baseline gap-2">
+          <h3 className="text-2xl font-black text-slate-800">{metric}</h3>
+          <span className="text-xs font-medium text-slate-500">{label}</span>
+        </div>
+        <p className="text-xs font-semibold text-slate-400 mt-2 flex items-center gap-1">
+          <TrendingUp className="h-3 w-3 text-emerald-500" />
+          {subMetric}
         </p>
       </CardContent>
     </Card>
