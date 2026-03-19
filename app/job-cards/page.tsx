@@ -394,13 +394,13 @@ export default function JobCardsPage() {
   selectedOrder.deliveryOrderNo,
   selectedOrder.partyName,      
   selectedOrder.productName,    
-  selectedOrder.orderQuantity,  
+  formData.totalMade,
   format(formData.dateOfProduction, "dd/MM/yyyy"),
   formData.shift,               
-  formData.notes || "",         // ✅ K (11) → Remarks moved here
-  formData.totalMade,           // ✅ L (12) → Total Made moved here
-  "",                           
-  "0",                          
+  formData.notes || "",         
+  "",          
+  "", 
+  "" ,                         
   "",                           
 ]
 

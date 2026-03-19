@@ -8,8 +8,8 @@ import { format, parse } from "date-fns"
 import { useGoogleSheet, parseGvizDate } from "@/lib/g-sheets"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
-
-// Shadcn UI components
+import { Toaster } from "@/components/ui/toaster"
+import { useToast } from "@/components/ui/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -142,7 +142,7 @@ export default function CheckPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-
+  const { toast } = useToast()   // ✅ यहीं
   // Dialog and Form State
   const [isKittingDialogOpen, setIsKittingDialogOpen] = useState(false)
   const [isReviseDialogOpen, setIsReviseDialogOpen] = useState(false)
@@ -195,7 +195,7 @@ const [transportingCost, setTransportingCost] = useState("0")
   const processGvizTable = (table: any) => {
     if (!table || !table.rows) return []
     return table.rows.map((row: any, index: number) => {
-const rowData: { [key: string]: any } = { _rowIndex: index + 1 }
+const rowData: { [key: string]: any } = { _rowIndex: index + 4 }
       if (row.c) {
         row.c.forEach((cell: any, cellIndex: number) => {
           rowData[`col${cellIndex}`] = cell ? (cell.f ?? cell.v) : null
@@ -648,78 +648,91 @@ setIsKittingDialogOpen(true)
   }
 
   const handleSaveKittingForm = async () => {
-    if (!selectedCheck) return
-    setIsSubmitting(true)
-    try {
-      const submissionDate = new Date()
-      const compositionNumber = await generateCompositionNumber()
+  if (!selectedCheck) return
+  setIsSubmitting(true)
+  try {
+    const submissionDate = new Date()
+    const compositionNumber = await generateCompositionNumber()
 
-      const rmNames = kittingFormRows.map((r) => r.productName)
-      const rmQtys = kittingFormRows.map((r) => r.percentage)
-      const paddedRmNames = [...rmNames, ...Array(20 - rmNames.length).fill("")]
-      const paddedRmQtys = [...rmQtys, ...Array(20 - rmQtys.length).fill("")]
+    const rmNames = kittingFormRows.map((r) => r.productName)
+    const rmQtys = kittingFormRows.map((r) => r.percentage)
+    const paddedRmNames = [...rmNames, ...Array(20 - rmNames.length).fill("")]
+    const paddedRmQtys = [...rmQtys, ...Array(20 - rmQtys.length).fill("")]
 
-  const rowData = [
-  format(submissionDate, "dd/MM/yyyy HH:mm:ss"),
-  compositionNumber,
-  selectedCheck.deliveryOrderNo,
-  selectedCheck.productName,
-  variableCost.toFixed(2),
-  MANUFACTURING_COST.toString(),
-  INTEREST_DAYS.toString(),
-  interestAmount.toFixed(2),
-  transportingCost,
-  finalSellingPrice.toFixed(2),   // ✅ Column J
-  gpPercentage,                  // ✅ Column K
-  kittingTotals.al.toFixed(4),
-  kittingTotals.fe.toFixed(4),
-  kittingTotals.bd.toFixed(4),
-  kittingTotals.ap.toFixed(4),
-  ...paddedRmNames,
-  ...paddedRmQtys,
-]
+    const rowData = [
+      format(submissionDate, "dd/MM/yyyy HH:mm:ss"),
+      compositionNumber,
+      selectedCheck.deliveryOrderNo,
+      selectedCheck.productName,
+      variableCost.toFixed(2),
+      MANUFACTURING_COST.toString(),
+      INTEREST_DAYS.toString(),
+      interestAmount.toFixed(2),
+      transportingCost,
+      finalSellingPrice.toFixed(2),
+      gpPercentage,
+      kittingTotals.al.toFixed(4),
+      kittingTotals.fe.toFixed(4),
+      kittingTotals.bd.toFixed(4),
+      kittingTotals.ap.toFixed(4),
+      ...paddedRmNames,
+      ...paddedRmQtys,
+    ]
 
-      const costingBody = new URLSearchParams({
-        sheetName: COSTING_RESPONSE_SHEET,
-        action: "insert",
-        rowData: JSON.stringify(rowData),
+    const costingBody = new URLSearchParams({
+      sheetName: COSTING_RESPONSE_SHEET,
+      action: "insert",
+      rowData: JSON.stringify(rowData),
+    })
+
+    const costingRes = await fetch(WEB_APP_URL, { method: "POST", body: costingBody })
+    const costingResult = await costingRes.json()
+    if (!costingResult.success) throw new Error(costingResult.error || "Failed to save to Costing Response sheet.")
+
+    if (selectedCheck._rowIndex && selectedCheck._rowIndex > 0) {
+      const productionUpdateBody = new URLSearchParams({
+        sheetName: PRODUCTION_SHEET,
+        action: "updateCells",
+        rowIndex: selectedCheck._rowIndex.toString(),
+        cellUpdates: JSON.stringify({
+          [FULL_KITTING_COLUMNS.verificationTimestamp]: format(submissionDate, "dd/MM/yyyy HH:mm:ss"),
+        }),
       })
 
-      const costingRes = await fetch(WEB_APP_URL, { method: "POST", body: costingBody })
-      const costingResult = await costingRes.json()
-      if (!costingResult.success) throw new Error(costingResult.error || "Failed to save to Costing Response sheet.")
+      const productionRes = await fetch(WEB_APP_URL, { method: "POST", body: productionUpdateBody })
+      const productionResult = await productionRes.json()
 
-      if (selectedCheck._rowIndex && selectedCheck._rowIndex > 0) {
-  const productionUpdateBody = new URLSearchParams({
-    sheetName: PRODUCTION_SHEET,
-    action: "updateCells",
-    rowIndex: selectedCheck._rowIndex.toString(),
-    cellUpdates: JSON.stringify({
-      [FULL_KITTING_COLUMNS.verificationTimestamp]: format(submissionDate, "dd/MM/yyyy HH:mm:ss"),
-    }),
-  })
-
-  const productionRes = await fetch(WEB_APP_URL, { method: "POST", body: productionUpdateBody })
-  const productionResult = await productionRes.json()
-
-  if (!productionResult.success)
-    throw new Error(productionResult.error || "Failed to update Production sheet.")
-}
-
-     setIsKittingDialogOpen(false)
-setSelectedCheck(null)
-setSelectedHistoryItem(null)
-
-await loadData()
-
-alert("Full Kitting data submitted successfully!")
-    } catch (err: any) {
-      setError(err.message)
-      alert(`Error: ${err.message}`)
-    } finally {
-      setIsSubmitting(false)
+      if (!productionResult.success)
+        throw new Error(productionResult.error || "Failed to update Production sheet.")
     }
+
+    setIsKittingDialogOpen(false)
+    setSelectedCheck(null)
+    setSelectedHistoryItem(null)
+
+    await loadData()
+    
+    // ✅ Fix: Call toast with proper parameters
+    toast({
+      title: "Success!",
+      description: "Full Kitting data has been submitted successfully.",
+      variant: "default", // or "success" if your toast supports it
+      duration: 2000, // 5 seconds
+    })
+
+  } catch (err: any) {
+    setError(err.message)
+    // Show error toast
+    toast({
+      title: "Error!",
+      description: err.message,
+      variant: "destructive",
+      duration: 2000,
+    })
+  } finally {
+    setIsSubmitting(false)
   }
+}
 
   const handleViewMaterials = (materials: string[], percentages: string[]) => {
     setViewingMaterials({ names: materials, percentages })

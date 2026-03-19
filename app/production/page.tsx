@@ -121,6 +121,7 @@ const PENDING_COLUMNS_META = [
   { header: "Job Card No.", dataKey: "jobCardNo", alwaysVisible: true, toggleable: false },
   { header: "Delivery Order No.", dataKey: "deliveryOrderNo", toggleable: true },
   { header: "Quantity", dataKey: "quantity", toggleable: true },
+  { header: "Total Made", dataKey: "totalMade", toggleable: true },
   { header: "Expected Delivery Date", dataKey: "expectedDeliveryDate", toggleable: true },
   { header: "Planned Date", dataKey: "plannedDate", toggleable: true },
   { header: "Priority", dataKey: "priority", toggleable: true },
@@ -314,6 +315,7 @@ const pending = pendingFiltered.map((row) => {
     partyName: String(row.F || ""),
     productName: String(row.G || ""),
     orderQuantity: Number(row.H || 0),
+    totalMade: Number(row.L || 0), // ✅ ADD THIS LINE
     dateOfProduction: row.I ? format(parseGvizDate(row.I), "dd/MM/yyyy") : "",
     plannedDate: row.I ? format(parseGvizDate(row.I), "dd/MM/yy") : "",
     shift: String(row.J || ""),
