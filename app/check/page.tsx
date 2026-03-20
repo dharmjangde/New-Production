@@ -1050,7 +1050,7 @@ export default function CheckPage() {
                 <Badge variant="secondary" className="ml-1.5 px-1.5 py-0.5 text-xs">{hemlalPending.length}</Badge>
               </TabsTrigger>
               <TabsTrigger value="devshree" className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4" /> Devshree
+                <CheckCircle className="h-4 w-4" /> Production Incharge
                 <Badge variant="secondary" className="ml-1.5 px-1.5 py-0.5 text-xs">{devshreePending.length}</Badge>
               </TabsTrigger>
               <TabsTrigger value="history" className="flex items-center gap-2">
@@ -1066,7 +1066,6 @@ export default function CheckPage() {
                   <div className="flex justify-between items-center">
                     <CardTitle className="text-md font-semibold text-foreground flex items-center">
                       <User className="h-5 w-5 text-blue-600 mr-2" />
-                      Hemlal / ANAND Pending ({hemlalPending.length})
                     </CardTitle>
                     <ColumnToggler
                       tab="hemlal"
