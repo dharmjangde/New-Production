@@ -6,8 +6,7 @@ import { useState, useEffect, useCallback, useMemo } from "react"
 import { Loader2, AlertTriangle, CheckCircle, Settings, Plus, X, FileText, Eye, Calendar, Edit } from "lucide-react"
 import { format, parse } from "date-fns"
 import { useGoogleSheet, parseGvizDate } from "@/lib/g-sheets"
-import jsPDF from "jspdf"
-import autoTable from "jspdf-autotable"
+
 import { Toaster } from "@/components/ui/toaster"
 import { useToast } from "@/components/ui/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -532,10 +531,14 @@ setIsKittingDialogOpen(true)
     return `CN-${String(maxNumber + 1).padStart(3, "0")}`
   }
 
-  const generatePDF = (forPreview: boolean = false) => {
-    if (!selectedCheck) return
+  const generatePDF = async (forPreview: boolean = false) => {
+  if (!selectedCheck) return
 
-    const doc = new jsPDF()
+  // ✅ dynamic import (IMPORTANT)
+  const { jsPDF } = await import("jspdf")
+  const autoTable = (await import("jspdf-autotable")).default
+
+  const doc = new jsPDF()
     const pageWidth = doc.internal.pageSize.getWidth()
 
     // Title
@@ -642,11 +645,10 @@ setIsKittingDialogOpen(true)
     }
   }
 
-  const handlePreviewPDF = () => {
-    if (!selectedCheck) return
-    generatePDF(true)
-  }
-
+  const handlePreviewPDF = async () => {
+  if (!selectedCheck) return
+  await generatePDF(true)
+}
   const handleSaveKittingForm = async () => {
   if (!selectedCheck) return
   setIsSubmitting(true)
