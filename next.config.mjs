@@ -10,10 +10,18 @@ const nextConfig = {
   experimental: {
     turbo: {
       resolveAlias: {
-        fflate: "fflate/browser",
-        jspdf: "jspdf/dist/jspdf.es.min.js",
+        "fflate/lib/node.cjs": "fflate/browser",
+        "fflate": "fflate/browser",
+        "jspdf": "jspdf/dist/jspdf.es.min.js",
       },
     },
+  },
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      fflate: "fflate/browser",
+    }
+    return config
   },
 }
 
