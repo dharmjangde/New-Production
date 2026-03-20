@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback, useMemo } from "react"
 import { Loader2, AlertTriangle, CheckCircle, Settings, Plus, X, FileText, Eye, Calendar, Edit } from "lucide-react"
 import { format, parse } from "date-fns"
 import { useGoogleSheet, parseGvizDate } from "@/lib/g-sheets"
-
+import { generatePDF } from "@/components/pdfgenerator"
 import { Toaster } from "@/components/ui/toaster"
 import { useToast } from "@/components/ui/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
